@@ -65,18 +65,21 @@ def handle_request(server_packet_window: list[DataPacket]) -> AckPacket:
     took = int((time.time()-started)*1000)
     pass
 
-def loop(message: str, client_config: ConnectionConfig, sock: socket.socket):
-    msg_size = client_config.message_size
+def message_to_chunks(message: str, max_message_size: int) -> list[DataPacket]:
     packet_list = list()
 
-    for i in range(len(message), msg_size):
-        packet_list.append(DataPacket("PUSH", i, message[i:i+msg_size] + '\n'))
+    for i in range(0, len(message), max_message_size):
+        packet_list.append(DataPacket("PUSH", i, message[i:i+max_message_size] + '\n'))
+    return packet_list
+
+def __send_chunks(packet_list: list, sock: socket.socket, window_size: int):
+    for i in range(window_size):
+        sock.sendall(packet_list[i])
 
 
 def send_packets(packet_list: list, sock: socket.socket, timeout: int, window_size: int):
 
-    for i in range(window_size):
-        sock.sendall(packet_list[i])
+    __send_chunks(packet_list, sock, window_size)
 
     sock.settimeout(timeout)
     buff = b""
@@ -87,7 +90,7 @@ def send_packets(packet_list: list, sock: socket.socket, timeout: int, window_si
             break
         buff += chunk
         if b"\n" in buff:
-            line, _, _ = buff.partition(b"\n")
+            line, _, _ = buff.partition(b"*")
             for i in range(len(line)):
                 data_string = json.loads(line)
 
@@ -135,6 +138,8 @@ def main():
     server_config = ConnectionConfig.set_properties_from_file(syn_ack_packet.window, syn_ack_packet.timeout,
                                                               syn_ack_packet.maximum_message_size, syn_ack_packet.dynamic)
     negotiate_connection(server_config, client_config)
+
+    message = FileHandler(args.config).get_message()
 
 
 if __name__ == "__main__":

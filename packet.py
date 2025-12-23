@@ -1,7 +1,5 @@
 from abc import ABC, abstractmethod
 import json
-
-from configuration import ConnectionConfig
 from file_handler import FileHandler
 
 
