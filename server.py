@@ -1,12 +1,13 @@
 # server.py
 
-import argparse, socket, json, time, threading, math, os, ast, operator, collections
-from typing import Any, Dict
-from file_handler import FileHandler
+import argparse, socket, json, time, threading
+import math
+
 from packet import *
+from collections import deque
 
 
-def handle_handshake(sock: socket.socket, host: str, port: int, packet: HandshakePacket) -> HandshakePacket | None :
+def handle_handshake(sock: socket.socket, packet: HandshakePacket) -> HandshakePacket | None :
     """Send a SYN Packet and Receive SYN.ACK Packet"""
     while True:
         conn, addr = sock.accept()
@@ -36,16 +37,28 @@ def handle_handshake(sock: socket.socket, host: str, port: int, packet: Handshak
 
 
 # ---------------- Server core ----------------
-def handle_request(msg: Dict[str, Any]) -> Dict[str, Any]:
-    mode = msg.get("flag")
-    data = msg.get("data") or None
-    sequence = msg.get("sequence") or None
-    ack = msg.get("ack") or None
+
+def handle_response(packet_window: list[DataPacket]):
+    """
+    takes all Data Packets of the Server and Send them over the Socket
+    :param packet_window: the list of the Data Packets of the Server
+    """
+
+
+def handle_request(client_packet_window: list[DataPacket]) -> AckPacket:
+    """
+    handles window framing and timing
+    if a window is missing one or more DataPacket, the Server should inform the Client by sending ACK
+    of the last Data Packet it got.
+    for example: if our window has DataPackets from sequence number 5 till 10, but is missing sequence
+    number 8, we should send ACK about sequence number 7 (cause that the last Packet up until 8 we got)
+    :param client_packet_window: window (list) of Data Packets
+    :return: the response DataPacket Window (list of Data Packets
+    """
 
     started = time.time()
 
     #---------build Message Flow---------
-
 
     took = int((time.time()-started)*1000)
 
@@ -86,23 +99,15 @@ def handle_client(conn: socket.socket, addr):
             except Exception:
                 pass
 
-def create_handshake_packet(file_path: str) -> HandshakePacket:
-    file_handler = FileHandler(file_path)
-    window_size = file_handler.get_att("window_size")
-    timeout = file_handler.get_att("timeout")
-    maximum_message_size = file_handler.get_att("maximum_msg_size")
-    syn_packet = HandshakePacket("SYN/ACK", window_size, timeout)
-    return syn_packet
-
 def main():
-    ap = argparse.ArgumentParser(description="Server JSON Reliable Data Transfer over TCP")
+    ap = argparse.ArgumentParser(description="JSON Reliable Data Transfer Server over TCP")
     ap.add_argument("--host", default="127.0.0.1")
     ap.add_argument("--port", type=int, default=5555)
     ap.add_argument("--config", type=str, default="config.txt")
     args = ap.parse_args()
 
-    # -----create SYN Packet
-    syn__ack_packet = create_handshake_packet(args.config)
+    # --------------------------create SYN/ACK Packet-----------------------------------#
+    initial_packet = HandshakePacket.create_handshake_packet(args.config, "SYN/ACK")
 
     server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
@@ -110,9 +115,9 @@ def main():
     server.listen(16)
     print(f"[Server] listening on {args.host}:{args.port}...")
 
-    handshake_response = handle_handshake(server, args.host, args.port, syn__ack_packet)
+    initial_response = handle_handshake(server, initial_packet)
 
-    print(handshake_response)
+    print(initial_response)
 
 if __name__ == "__main__":
     main()

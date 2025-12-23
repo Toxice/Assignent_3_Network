@@ -5,11 +5,14 @@ class FileHandler:
         self.path = path
         self.data = dict()
 
-        f = open(self.path, 'r')
+        with open(self.path, 'r') as f:
+            for line in f:
+                key, value = line.strip().split(":")
+                self.data[key] = value  # or int(value) if needed
 
-        for line in f:
-            key, value = line.strip().split(":")
-            self.data[key] = value  # or int(value) if needed
-
-    def get_att(self, key: str) -> str | int | None:
+    def get_att(self, key: str) -> str | int | bool | None:
         return self.data.get(key)
+
+    def get_message(self) -> str:
+        with open(self.data.get('message'), 'r') as f:
+            return f.read()
