@@ -1,12 +1,18 @@
+# configuration.py
+
 from file_handler import FileHandler
 
 class ConnectionConfig:
     def __init__(self, path: str):
         file = FileHandler(path)
-        self.window_size = file.get_att("window_size")
-        self.message_size = file.get_att("maximum_message_size")
-        self.timeout = file.get_att("timeout")
-        self.dynamic = file.get_att("dynamic_message_size")
+        # Force integer casting here
+        self.window_size = int(file.get_att("window_size"))
+        self.message_size = int(file.get_att("maximum_msg_size"))  # Fixed key name to match config.txt
+        self.timeout = int(file.get_att("timeout"))
+
+        # specific check for boolean
+        dyn = bool(file.get_att("dynamic_message_size"))
+        self.dynamic = True if str(dyn).lower() == "true" else False
 
     def get_window_size(self) -> int:
         return self.window_size
@@ -19,9 +25,3 @@ class ConnectionConfig:
 
     def get_is_dynamic(self) -> bool:
         return self.dynamic
-
-    def set_properties_from_file(self, window_size, timeout, message_size, dynamic):
-        self.window_size = window_size
-        self.timeout = timeout
-        self.message_size = message_size
-        self.dynamic = dynamic

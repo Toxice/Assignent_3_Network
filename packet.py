@@ -1,16 +1,17 @@
 from abc import ABC, abstractmethod
 import json
 from file_handler import FileHandler
-
+from packet_type import PacketType
+# packet.py
 
 class Packet(ABC):
     """
     Abstract Class made to model a Packet
     """
-    def __init__(self, flag: str):
+    def __init__(self, flag: PacketType):
         self.flag = flag
         self.data = {
-            "flag": self.flag
+            "flag": str(self.flag)
         }
 
     @abstractmethod
@@ -21,14 +22,18 @@ class Packet(ABC):
     def return_dict(self) -> dict:
         pass
 
+    @abstractmethod
+    def to_bytes(self) -> bytes:
+        pass
+
 
 class HandshakePacket(Packet):
-    def __init__(self, flag: str, window: int, maximum_message_size: int, timeout: int, dynamic_size: bool):
+    def __init__(self, flag: PacketType, window: int, maximum_message_size: int, timeout: int, dynamic_size: bool):
         super().__init__(flag)
-        self.window = window
-        self.maximum_message_size = maximum_message_size
-        self.timeout = timeout
-        self.dynamic = dynamic_size
+        self.window = int(window)
+        self.maximum_message_size = int(maximum_message_size)
+        self.timeout = int(timeout)
+        self.dynamic = bool(dynamic_size)
 
     def return_dict(self) -> dict:
             return {
@@ -42,18 +47,22 @@ class HandshakePacket(Packet):
     def __str__(self):
         return json.dumps(self.return_dict())
 
+    def to_bytes(self) -> bytes:
+        return (json.dumps(self.return_dict) + "*").encode('utf-8')
+
+
     @staticmethod
     def json_to_packet(json_dict: dict) -> HandshakePacket:
         flag = json_dict.get('flag')
         window = json_dict.get('window_size')
         maximum_message_size = json_dict.get('maximum_msg_size')
         timeout = json_dict.get('timeout')
-        dynamic = json_dict.get('dynamic')
+        dynamic = json_dict.get('dynamic_size')
         packet = HandshakePacket(flag, window, maximum_message_size, timeout, dynamic)
         return packet
 
     @staticmethod
-    def create_handshake_packet(config_file: str, flag: str) -> HandshakePacket:
+    def create_handshake_packet(config_file: str, flag: PacketType) -> HandshakePacket:
         """
         Create the initial SYN Packet
         :param config_file: ConnectionConfig File
@@ -66,7 +75,7 @@ class HandshakePacket(Packet):
 
 
 class FinPacket(Packet):
-    def __init__(self, flag: str):
+    def __init__(self, flag: PacketType):
         super().__init__(flag)
 
     def __str__(self):
@@ -83,8 +92,11 @@ class FinPacket(Packet):
             "flag": self.flag
         }
 
+    def to_bytes(self) -> bytes:
+        return (json.dumps(self.return_dict()) + "*").encode('utf-8')
+
 class DataPacket(Packet):
-    def __init__(self, flag: str, sequence: int, payload: str):
+    def __init__(self, flag: PacketType, sequence: int, payload: str):
         super().__init__(flag)
         self.sequence = sequence
         self.payload = payload
@@ -115,6 +127,10 @@ class DataPacket(Packet):
             "payload": self.payload
             }
 
+    def to_bytes(self) -> bytes:
+        return (json.dumps(self.return_dict()) + "*").encode('utf-8')
+
+
     @staticmethod
     def json_to_packet(json_dict: dict) -> DataPacket:
         flag = json_dict.get('flag')
@@ -124,7 +140,7 @@ class DataPacket(Packet):
         return packet
 
 class AckPacket(Packet):
-    def __init__(self, flag: str, ack: int):
+    def __init__(self, flag: PacketType, ack: int):
         super().__init__(flag)
         self.ack = ack
 
@@ -144,9 +160,11 @@ class AckPacket(Packet):
         packet = AckPacket(flag, ack)
         return packet
 
+    def to_bytes(self) -> bytes:
+        return (json.dumps(self.return_dict()) + "*").encode('utf-8')
 
 class HandshakeAckPacket(Packet):
-    def __init__(self, flag: str):
+    def __init__(self, flag: PacketType):
         super().__init__(flag)
 
     @staticmethod
@@ -162,3 +180,6 @@ class HandshakeAckPacket(Packet):
 
     def __str__(self):
         return json.dumps(self.return_dict())
+
+    def to_bytes(self) -> bytes:
+        return (json.dumps(self.return_dict()) + "*").encode('utf-8')
