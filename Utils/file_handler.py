@@ -14,5 +14,4 @@ class FileHandler:
         return self.data.get(key)
 
     def get_message(self) -> str:
-        with open(self.data.get('message'), 'r') as f:
-            return f.read()
+        return str(self.data.get("message"))

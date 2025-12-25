@@ -1,5 +1,5 @@
-from packet import DataPacket
-from packet_type import PacketType
+from Network_Packets.packet import DataPacket
+from Network_Packets.packet_type import PacketType
 
 
 class Chunker:

@@ -1,7 +1,6 @@
-from packet import DataPacket
-from packet_type import PacketType
+from Network_Packets.packet import DataPacket
 import socket
-import json
+
 
 class Framer:
     """

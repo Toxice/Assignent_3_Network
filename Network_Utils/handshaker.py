@@ -1,7 +1,7 @@
-from packet import HandshakePacket, HandshakeAckPacket
+from Network_Packets.packet import HandshakePacket, HandshakeAckPacket
 import socket
 import json
-from packet_type import PacketType
+from Network_Packets.packet_type import PacketType
 
 class Handshaker:
     def __init__(self, sock: socket.socket, packet: HandshakePacket, address: tuple):

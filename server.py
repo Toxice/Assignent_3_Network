@@ -1,123 +1,139 @@
-# server.py
-
-import argparse, socket, json, time, threading
-import math
-
-from packet import *
-from collections import deque
+import socket
+import argparse
+from Network_Packets.packet import *
+from Network_Packets.packet_type import PacketType
 
 
-def handle_handshake(sock: socket.socket, packet: HandshakePacket) -> HandshakePacket | None :
-    """Send a SYN Packet and Receive SYN.ACK Packet"""
-    while True:
-        conn, addr = sock.accept()
-        print(f"[Server] client connected on {addr}")
-        data = (json.dumps(packet.return_dict(), ensure_ascii=False) + "\n").encode("utf-8")
-        # send SYN to Server
-        buff = b""
-        while True:
-            chunk = conn.recv(4096)
-            if not chunk:
-                break
-            buff += chunk
-            if b"\n" in buff:
-                line, _, _ = buff.partition(b"\n")
-                data_dict = json.loads(line.decode("utf-8"))
-                packet_out = HandshakePacket.json_to_packet(data_dict)
-                if packet_out.flag == "SYN":
-                    print(f"[Server] got request: {packet_out}")
-                    print("[Server] sending SYN/ACK....")
-                    data_out = (json.dumps(packet.return_dict(), ensure_ascii=False) + "\n").encode("utf-8")
-                    conn.sendall(data_out)
-                    return packet_out
+class Server:
+    def __init__(self, host, port, config_path):
+        self.address = (host, port)
+        self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sock.bind(self.address)
+        self.sock.listen(1)
+        self.config_path = config_path
+        print(f"[Server] Listening on {host}:{port}")
 
-                else:
-                    print("[Client] didn't got SYN/ACK...Handshake Failed")
-                    return None
+    def start(self):
+        conn, addr = self.sock.accept()
+        print(f"[Server] Connection from {addr}")
 
-
-# ---------------- Server core ----------------
-
-def handle_response(packet_window: list[DataPacket]):
-    """
-    takes all Data Packets of the Server and Send them over the Socket
-    :param packet_window: the list of the Data Packets of the Server
-    """
-
-
-def handle_request(client_packet_window: list[DataPacket]) -> AckPacket:
-    """
-    handles window framing and timing
-    if a window is missing one or more DataPacket, the Server should inform the Client by sending ACK
-    of the last Data Packet it got.
-    for example: if our window has DataPackets from sequence number 5 till 10, but is missing sequence
-    number 8, we should send ACK about sequence number 7 (cause that the last Packet up until 8 we got)
-    :param client_packet_window: window (list) of Data Packets
-    :return: the response DataPacket Window (list of Data Packets
-    """
-
-    started = time.time()
-
-    #---------build Message Flow---------
-
-    took = int((time.time()-started)*1000)
-
-
-def serve(host: str, port: int):
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-        s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        s.bind((host, port))
-        s.listen(16)
-        print(f"[server] listening on {host}:{port}")
-        #------handle handshake-----
-
-
-        while True:
-            conn, addr = s.accept()
-            threading.Thread(target=handle_client, args=(conn, addr), daemon=True).start()
-
-def handle_client(conn: socket.socket, addr):
-    with conn:
         try:
-            raw = b""
-            while True:
-                chunk = conn.recv(4096)
-                if not chunk:
-                    break
-                raw += chunk
-                if b"\n" in raw:
-                    line, _, rest = raw.partition(b"\n")
-                    raw = rest
-                    msg = json.loads(line.decode("utf-8"))
-                    resp = handle_request(msg)
-                    out = (json.dumps(resp, ensure_ascii=False) + "\n").encode("utf-8")
-                    conn.sendall(out)
-                    break
+            buffer = b""
+            # 1. Handshake Phase
+            success, buffer = self.handle_handshake(conn, buffer)
+            if not success:
+                return
+
+            # 2. Data Transfer Phase
+            self.handle_transfer(conn, buffer)
+
         except Exception as e:
+            print(f"[Server] Error: {e}")
+        finally:
+            conn.close()
+            self.sock.close()
+            print("[Server] Connection closed.")
+
+    def _recv_packet(self, conn, buffer):
+        """Helper to get exactly one packet line"""
+        while b"\n" not in buffer:
+            chunk = conn.recv(4096)
+            if not chunk: return None, buffer
+            buffer += chunk
+
+        line, _, buffer = buffer.partition(b"\n")
+        return line, buffer
+
+    def handle_handshake(self, conn: socket.socket, buffer: bytes) -> tuple[bool, bytes]:
+        print("[Server] Waiting for Handshake...")
+
+        # Expect SYN
+        line, buffer = self._recv_packet(conn, buffer)
+        if not line: return False, buffer
+
+        syn_packet_dict = json.loads(line.decode('utf-8'))
+        print(f"[Server] Received Packet: {syn_packet_dict}")
+
+        if syn_packet_dict.get('flag') == PacketType.SYN.value:
+            # Send SYN/ACK
+            syn_ack = HandshakePacket(PacketType.SYNACK, window=4, maximum_message_size=1024, timeout=5,
+                                      dynamic_size=False)
+            print(f"[Server] Sending SYN/ACK: {syn_ack.return_dict()}")
+            conn.sendall(syn_ack.to_bytes())
+
+            # Expect ACK
+            line, buffer = self._recv_packet(conn, buffer)
+            if not line: return False, buffer
+
+            ack_dict = json.loads(line.decode('utf-8'))
+            print(f"[Server] Received Packet: {ack_dict}")
+
+            if ack_dict.get('flag') == PacketType.ACK.value:
+                print("[Server] Handshake Complete.")
+                return True, buffer
+
+        return False, buffer
+
+    def handle_transfer(self, conn: socket.socket, buffer: bytes):
+        expected_sequence = 0
+        received_payload = ""
+
+        while True:
+            line, buffer = self._recv_packet(conn, buffer)
+            if not line: break
+
             try:
-                conn.sendall((json.dumps({"ok": False, "error": f"Malformed: {e}"} ) + "\n").encode("utf-8"))
-            except Exception:
-                pass
+                data_dict = json.loads(line.decode('utf-8'))
+                flag = data_dict.get('flag')
+                print(f"[Server] Received Packet: {data_dict}")
 
-def main():
-    ap = argparse.ArgumentParser(description="JSON Reliable Data Transfer Server over TCP")
-    ap.add_argument("--host", default="127.0.0.1")
-    ap.add_argument("--port", type=int, default=5555)
-    ap.add_argument("--config", type=str, default="config.txt")
-    args = ap.parse_args()
+                # --- FIN ---
+                if flag == PacketType.FIN.value:
+                    print("[Server] Sending FIN/ACK...")
+                    fin_ack = FinPacket(PacketType.FINACK)
+                    conn.sendall(fin_ack.to_bytes())
+                    print(f"[Server] Sent: {fin_ack.return_dict()}")
 
-    # --------------------------create SYN/ACK Packet-----------------------------------#
-    initial_packet = HandshakePacket.create_handshake_packet(args.config, "SYN/ACK")
+                    # Wait for Final ACK
+                    line, buffer = self._recv_packet(conn, buffer)
+                    if line:
+                        ack_dict = json.loads(line.decode('utf-8'))
+                        print(f"[Server] Received Final ACK: {ack_dict}")
 
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind((args.host, args.port))
-    server.listen(16)
-    print(f"[Server] listening on {args.host}:{args.port}...")
+                    self.save_message(received_payload)
+                    break
 
-    initial_response = handle_handshake(server, initial_packet)
+                # --- PUSH (Data) ---
+                elif flag == PacketType.PUSH.value:
+                    seq = data_dict.get('sequence')
+                    payload = data_dict.get('payload')
 
-    print(initial_response)
+                    if seq == expected_sequence:
+                        received_payload += payload
+                        # Send ACK
+                        ack = AckPacket(PacketType.ACK, seq)
+                        conn.sendall(ack.to_bytes())
+                        print(f"[Server] Sent ACK: {ack.return_dict()}")
+
+                        expected_sequence += len(payload)
+                    else:
+                        print(f"[Server] Out of order! Expected {expected_sequence}, got {seq}. Ignoring.")
+
+            except json.JSONDecodeError:
+                print("[Server] JSON Error, skipping packet")
+
+    def save_message(self, payload):
+        with open("server_output.txt", "w") as f:
+            f.write(payload)
+        print(f"[Server] Message content saved to server_output.txt")
+
 
 if __name__ == "__main__":
-    main()
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--host", default="127.0.0.1")
+    parser.add_argument("--port", type=int, default=5555)
+    parser.add_argument("--config", default="config.txt")
+    args = parser.parse_args()
+
+    server = Server(args.host, args.port, args.config)
+    server.start()

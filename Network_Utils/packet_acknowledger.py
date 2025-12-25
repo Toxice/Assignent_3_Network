@@ -1,7 +1,6 @@
 import socket
-from packet import DataPacket, AckPacket
-from packet_type import PacketType
-from window_framer import Framer
+from Network_Packets.packet import DataPacket, AckPacket
+from Network_Packets.packet_type import PacketType
 import json
 from collections import deque
 
