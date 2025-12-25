@@ -11,8 +11,12 @@ def handle_handshake(sock: socket.socket, config: ConnectionConfig) -> bool:
     print("[Client] Starting Handshake...")
 
     # 1. Send SYN
-    syn_packet = HandshakePacket(PacketType.SYN, config.window_size, config.message_size, config.timeout,
+    syn_packet = HandshakePacket(PacketType.SYN,
+                                 config.window_size,
+                                 config.message_size,
+                                 config.timeout,
                                  config.dynamic)
+
     print(f"[Client] Sending SYN: {syn_packet.return_dict()}")
     sock.sendall(syn_packet.to_bytes())
 
@@ -105,7 +109,7 @@ def handle_teardown(sock: socket.socket):
 
             if response.get('flag') == PacketType.FINACK.value:
                 print("[Client] Received FIN/ACK. Sending Final ACK.")
-                ack = AckPacket(PacketType.ACK, 0)
+                ack = HandshakeAckPacket(PacketType.ACK)
                 print(f"[Client] Sending Final ACK: {ack.return_dict()}")
                 sock.sendall(ack.to_bytes())
                 break

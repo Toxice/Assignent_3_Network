@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import json
 from Utils.file_handler import FileHandler
-from packet_type import PacketType
+from Network_Packets.packet_type import PacketType
 
 
 class Packet(ABC):

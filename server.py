@@ -1,16 +1,24 @@
+import json
 import socket
 import argparse
-from Network_Packets.packet import *
+
+from Network_Packets.packet import HandshakePacket, FinPacket, AckPacket
 from Network_Packets.packet_type import PacketType
+from Utils.file_handler import FileHandler
 
 
 class Server:
     def __init__(self, host, port, config_path):
         self.address = (host, port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.config_path = config_path
+        self.file_handler = FileHandler(self.config_path)
+        self.window_size = self.file_handler.get_window_size()
+        self.timeout = self.file_handler.get_timeout()
+        self.message_size = self.file_handler.get_message_size()
+        self.dynamic_size = self.file_handler.get_dynamic_state()
         self.sock.bind(self.address)
         self.sock.listen(1)
-        self.config_path = config_path
         print(f"[Server] Listening on {host}:{port}")
 
     def start(self):
@@ -56,8 +64,10 @@ class Server:
 
         if syn_packet_dict.get('flag') == PacketType.SYN.value:
             # Send SYN/ACK
-            syn_ack = HandshakePacket(PacketType.SYNACK, window=4, maximum_message_size=1024, timeout=5,
-                                      dynamic_size=False)
+            syn_ack = HandshakePacket(PacketType.SYNACK, window=self.window_size,
+                                      maximum_message_size=self.message_size,
+                                      timeout=self.timeout,
+                                      dynamic_size=self.dynamic_size)
             print(f"[Server] Sending SYN/ACK: {syn_ack.return_dict()}")
             conn.sendall(syn_ack.to_bytes())
 
@@ -126,6 +136,7 @@ class Server:
         with open("server_output.txt", "w") as f:
             f.write(payload)
         print(f"[Server] Message content saved to server_output.txt")
+
 
 
 if __name__ == "__main__":
