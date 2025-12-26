@@ -5,7 +5,7 @@ class FileHandler:
 
         with open(self.path, 'r') as f:
             for line in f:
-                key, value = line.strip().split(":")
+                key, value = line.strip().split(": ")
                 self.data[key] = value  # or int(value) if needed
 
     def get_window_size(self):
